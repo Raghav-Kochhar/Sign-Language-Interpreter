@@ -1,0 +1,13 @@
+base_dir: "/"
+data_dir: "data/MS-ASL"
+processed_video_folder: "processed_videos"
+model_save_path: "models/sign_language_model.pth"
+torchscript_model_save_path: "models/sign_language_model_torchscript.pt"
+learning_rate: 0.001
+batch_size: 32
+num_workers: 4
+num_epochs: 50
+train_ratio: 0.7
+val_ratio: 0.15
+max_workers: 4
+
