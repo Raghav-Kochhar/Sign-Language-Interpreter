@@ -12,11 +12,12 @@ SignLanguageInterpreter is an advanced AI model that predicts sign language from
 ## Installation
 
 1. Clone the repository:
-   git clone `https://github.com/Raghav-Kochhar/Sign-Language-Interpreter`
+   git clone `gh repo clone Raghav-Kochhar/Sign-Language-Interpreter`
+   <br>
    `cd Sign-Language-Interpreter`
-2. Install the required dependencies:
+3. Install the required dependencies:
    `pip install -r requirements.txt`
-3. Set up Google Drive integration for data storage (follow Google Colab instructions if using Colab)
+4. Set up Google Drive integration for data storage (follow Google Colab instructions if using Colab)
 
 ## Usage
 
