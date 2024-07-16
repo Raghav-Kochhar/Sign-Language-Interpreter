@@ -24,7 +24,9 @@ SignLanguageInterpreter is an advanced AI model that predicts sign language from
 ## Usage
 
 1. Prepare your config.yaml file with necessary parameters
-2. Run the main script:
+2. Run the Dataset downloader script:
+   `python script.py`
+4. Run the main script:
    `python app.py`
 
 ## Data Preparation
