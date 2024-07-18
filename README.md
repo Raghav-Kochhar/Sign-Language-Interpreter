@@ -14,7 +14,7 @@ SignLanguageInterpreter is an advanced AI model that predicts sign language from
 
    conda: `conda env create -f conda_env.yml`
 
-3. Download the model I have already trained and save it in the models folder: https://drive.google.com/file/d/1--SnAVYGYv3SLtUVYm3Z5UkFV-Z1725D/view?usp=drive_link
+3. Download the model I have already trained and save it in the models folder: [https://drive.google.com/file/d/1--SnAVYGYv3SLtUVYm3Z5UkFV-Z1725D/view?usp=drive_link](https://drive.google.com/file/d/13OKqHz0YFJo73eT7jn-6HAKW2VHAhiYp/view?usp=drive_link)
 
 4. Set up Google Drive integration for data storage (follow Google Colab instructions if using Colab)
 
