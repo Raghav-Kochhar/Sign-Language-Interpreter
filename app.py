@@ -3,76 +3,157 @@ import cv2
 import torch
 import numpy as np
 from torchvision import transforms
-from transformers import BertTokenizer, BertForSequenceClassification
-from data_preparation import MSASLDataset
+from script import MSASLDataset, load_config, SignLanguageModel
+from typing import List
+import tempfile
+import logging
 
-# Load models
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+config = load_config("config.yaml")
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-data_dir = "data/MS-ASL"
-dataset = MSASLDataset(data_dir, "train")
-num_classes = len(dataset.classes)
+try:
+    dataset = MSASLDataset(
+        config["data_dir"], config["processed_video_folder"], "train"
+    )
+    num_classes = len(dataset.classes)
+except Exception as e:
+    st.error(f"Error loading dataset: {str(e)}")
+    st.stop()
 
-# Load the TorchScript model
-sign_model = torch.jit.load("models/sign_language_model_torchscript.pt")
-sign_model.to(device)
-sign_model.eval()
-
-# Load BERT model
-bert_model = BertForSequenceClassification.from_pretrained(
-    "bert-base-uncased", num_labels=num_classes
-)
-bert_model.to(device)
-bert_model.eval()
-
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+try:
+    model = SignLanguageModel(
+        num_classes=num_classes, sequence_length=config["sequence_length"]
+    )
+    model.load_state_dict(torch.load(config["model_save_path"], map_location=device))
+    model.to(device)
+    model.eval()
+except Exception as e:
+    st.error(f"Error loading model: {str(e)}")
+    st.stop()
 
 transform = transforms.Compose(
     [
         transforms.ToPILImage(),
-        transforms.Resize((224, 224)),
+        transforms.Resize((config["image_size"], config["image_size"])),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 )
 
 
-def predict_sign(frame):
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    frame = transform(frame).unsqueeze(0).to(device)
+@st.cache_data
+def predict_sequence(frames: List[np.ndarray]) -> str:
+    processed_frames = torch.stack([transform(frame).to(device) for frame in frames])
+    processed_frames = processed_frames.unsqueeze(0)
 
     with torch.no_grad():
-        output = sign_model(frame)
+        output = model(processed_frames)
         _, predicted = torch.max(output, 1)
 
-    class_name = dataset.get_class_name(predicted.item())
-    synonyms = dataset.get_synonyms(class_name)
-    return class_name, synonyms
+    predicted_signs = [dataset.get_class_name(idx.item()) for idx in predicted]
+    return " ".join(predicted_signs)
 
 
-st.title("Sign Language Detection")
+@st.cache_data
+def get_synonyms(sign):
+    return dataset.get_synonyms(sign)
 
-run = st.checkbox("Run")
-FRAME_WINDOW = st.image([])
-camera = cv2.VideoCapture(0)
 
-# Create placeholders for sign and synonyms
-sign_placeholder = st.empty()
-synonyms_placeholder = st.empty()
+st.title("Sign Language Interpreter")
 
-while run:
-    _, frame = camera.read()
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    FRAME_WINDOW.image(frame)
+input_type = st.radio("Choose input type:", ("Webcam", "Video Upload"))
 
-    # Predict the sign
-    sign, sign_synonyms = predict_sign(frame)
+if input_type == "Webcam":
+    run = st.checkbox("Start Interpreting")
+    FRAME_WINDOW = st.image([])
+    camera = cv2.VideoCapture(0)
 
-    # Update the placeholders with new content
-    sign_placeholder.write(f"Detected Sign: {sign}")
-    synonyms_placeholder.write(f"Sign Synonyms: {', '.join(sign_synonyms)}")
+    interpretation_placeholder = st.empty()
+    synonyms_placeholder = st.empty()
 
-    # Add a small delay to reduce CPU usage
-    cv2.waitKey(100)
+    frames_buffer = []
+    frame_skip = 2
+    frame_count = 0
 
-st.write("Stopped")
+    while run:
+        _, frame = camera.read()
+        frame_count += 1
+
+        if frame_count % frame_skip == 0:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            FRAME_WINDOW.image(frame)
+
+            frames_buffer.append(frame)
+            if len(frames_buffer) == config["sequence_length"]:
+                sign_sequence = predict_sequence(frames_buffer)
+                interpretation_placeholder.write(
+                    f"Interpreted Sequence: {sign_sequence}"
+                )
+
+                synonyms = [get_synonyms(sign) for sign in sign_sequence.split()]
+                synonyms_text = ", ".join(
+                    [
+                        f"{sign}: {', '.join(syns)}"
+                        for sign, syns in zip(sign_sequence.split(), synonyms)
+                    ]
+                )
+                synonyms_placeholder.write(f"Synonyms: {synonyms_text}")
+
+                frames_buffer.pop(0)
+
+        cv2.waitKey(100)
+
+    camera.release()
+
+else:
+    uploaded_file = st.file_uploader("Choose a video file", type=["mp4", "avi", "mov"])
+    if uploaded_file is not None:
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_file_path = tmp_file.name
+
+            video = cv2.VideoCapture(tmp_file_path)
+            frames_buffer = []
+            all_predictions = []
+
+            progress_bar = st.progress(0)
+
+            frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+            for i in range(frame_count):
+                ret, frame = video.read()
+                if not ret:
+                    break
+
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames_buffer.append(frame)
+
+                if len(frames_buffer) == config["sequence_length"]:
+                    sign_sequence = predict_sequence(frames_buffer)
+                    all_predictions.append(sign_sequence)
+                    frames_buffer.pop(0)
+
+                progress_bar.progress((i + 1) / frame_count)
+
+            video.release()
+
+            st.write("Interpretation Results:")
+            for idx, prediction in enumerate(all_predictions):
+                st.write(f"Sequence {idx + 1}: {prediction}")
+
+                synonyms = [get_synonyms(sign) for sign in prediction.split()]
+                synonyms_text = ", ".join(
+                    [
+                        f"{sign}: {', '.join(syns)}"
+                        for sign, syns in zip(prediction.split(), synonyms)
+                    ]
+                )
+                st.write(f"Synonyms: {synonyms_text}")
+
+        except Exception as e:
+            st.error(f"Error processing video: {str(e)}")
