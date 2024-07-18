@@ -2,6 +2,8 @@
 
 SignLanguageInterpreter is an advanced AI model that predicts sign language from images and videos. It can interpret sign language gestures and translate them into text, as well as convert text into sign language representations.
 
+# CAUTION: YOU WILL HAVE TO DOWNLOAD A HUGE DATASET AND TRAIN THE MODEL ON IT FOR A LONG TIME TO GET GOOD RESULTS
+
 ## Installation
 
 1. Clone the repository:
